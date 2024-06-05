@@ -6,6 +6,9 @@ using Python.Runtime;
 using MyMapObjects;
 using System.Globalization;
 using System.Text;
+using Mysqlx.Crud;
+using static System.ComponentModel.Design.ObjectSelectorEditor;
+using System.Windows.Forms;
 
 
 namespace WeiboAnnualReportApp
@@ -13,12 +16,15 @@ namespace WeiboAnnualReportApp
     public partial class FormMain : Form
     {
         #region 字段
+
         private string connectionString = "server=127.0.0.1;user=root;password=lys150619; database=苏州市微博数据";
         private moMapcontrol moMap = new moMapcontrol();
         private bool booltest = false;
+        
         #endregion
 
         #region 构造函数
+
         public FormMain()
         {
             InitializeComponent();
@@ -36,20 +42,21 @@ namespace WeiboAnnualReportApp
             }
             moMap.Layers.Add(sLayer);  // 在control控件中添加一个城市图层
         }
+
         #endregion
 
         #region 控件事件
         private void btnOpenReport_Click(object sender, EventArgs e)
         {
-            
-            if (booltest==false)
+
+            if (booltest == false)
             {
                 MessageBox.Show("请先生成用户年度报告");
                 return;
             }
 
             string basePath = Path.GetDirectoryName(Application.ExecutablePath);  // 找到那个exe文件所在的位置
-            string mainHtmlPath = basePath + Path.DirectorySeparatorChar + "html" +Path.DirectorySeparatorChar + "MainPage.html";
+            string mainHtmlPath = basePath + Path.DirectorySeparatorChar + "html" + Path.DirectorySeparatorChar + "MainPage.html";
             OpenHtmlFile(mainHtmlPath);
             //webBrowserMap.Navigate(outputFilePath);
             //OpenHtmlFile(outputFilePath);
@@ -57,14 +64,97 @@ namespace WeiboAnnualReportApp
 
         private void btnCreateReport_Click(object sender, EventArgs e)
         {
-            
+
             string id = textBox1.Text;
+            string name = textBox1.Text;
+
             if (string.IsNullOrEmpty(id))
             {
-                MessageBox.Show("请输入你的用户ID");
+                MessageBox.Show("请输入你的用户ID或昵称");
                 return;
             }
             booltest = true;
+
+            //昵称查询获取ID
+            string query1 = "SELECT * FROM 苏州市微博数据.travel_poi_userinfo_suzhou WHERE 苏州市微博数据.travel_poi_userinfo_suzhou.screen_name = \"" + name + "\"";
+            DataTable dt1 = new DataTable();
+            using (MySqlConnection conn1 = new MySqlConnection(connectionString))
+            {
+                try
+                {
+                    conn1.Open();
+                    MySqlCommand cmd1 = new MySqlCommand(query1, conn1);
+                    MySqlDataAdapter adapter = new MySqlDataAdapter(cmd1);
+                    adapter.Fill(dt1);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+            if (dt1.Rows.Count > 0)
+            {
+                id = dt1.Rows[0][0].ToString();
+                string description = dt1.Rows[0][5].ToString();
+                string gender = dt1.Rows[0][8].ToString();
+                string followers = dt1.Rows[0][9].ToString();
+                string friends = dt1.Rows[0][10].ToString();
+                if (string.IsNullOrEmpty(description))
+                    label2.Text = "个性签名：这个家伙很懒，没留下签名";
+                else
+                    label2.Text = "个性签名：" + description;
+                if (gender == "f")
+                    label3.Text = "性别：小姐姐";
+                else if (gender == "m")
+                    label3.Text = "性别：小哥哥";
+                label4.Text = "粉丝数量：" + followers;
+                label5.Text = "好友数量：" + friends;
+                label6.Text = "用户ID：" + id;
+                label7.Text = "用户昵称：" + name;
+            }
+            //ID获取昵称
+            string query2 = "SELECT * FROM 苏州市微博数据.travel_poi_userinfo_suzhou WHERE 苏州市微博数据.travel_poi_userinfo_suzhou.id = " + id;
+            DataTable dt2 = new DataTable();
+            using (MySqlConnection conn2 = new MySqlConnection(connectionString))
+            {
+                try
+                {
+                    conn2.Open();
+                    MySqlCommand cmd2 = new MySqlCommand(query2, conn2);
+                    MySqlDataAdapter adapter = new MySqlDataAdapter(cmd2);
+                    adapter.Fill(dt2);
+
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+            if (dt2.Rows.Count > 0)
+            {
+                name = dt2.Rows[0][1].ToString();
+                string description = dt2.Rows[0][5].ToString();
+                string gender = dt2.Rows[0][8].ToString();
+                string followers = dt2.Rows[0][9].ToString();
+                string friends = dt2.Rows[0][10].ToString();
+                if (string.IsNullOrEmpty(description))
+                {
+                    label2.Text = "个性签名：这个家伙很懒，没留下签名";
+                }
+                else
+                {
+                    label2.Text = "个性签名：" + description;
+                }
+                if (gender == "f")
+                    label3.Text = "性别：小姐姐";
+                else if (gender == "m")
+                    label3.Text = "性别：小哥哥";
+                label4.Text = "粉丝数量：" + followers;
+                label5.Text = "好友数量：" + friends;
+                label6.Text = "用户ID：" + id;
+                label7.Text = "用户昵称：" + name;
+            }
+
             string query = $"SELECT latitude,longitude,text,created_at FROM 苏州市微博数据.geotaggedweibo WHERE 苏州市微博数据.geotaggedweibo.userid = @id and 苏州市微博数据.geotaggedweibo.latitude < 90";
             DataTable dt = new DataTable();
             using (MySqlConnection conn = new MySqlConnection(connectionString))
@@ -77,10 +167,8 @@ namespace WeiboAnnualReportApp
                     MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
 
                     adapter.Fill(dt);
-                    dataGridView1.DataSource = dt;
 
-                    // 调用JavaScript显示地图和标注点
-                    //ShowMapWithPoints(dt);
+
                 }
                 catch (Exception ex)
                 {
@@ -91,14 +179,13 @@ namespace WeiboAnnualReportApp
             {
                 //ShowMapWithPoints(dt);
                 GenerateHtmlFile(dt);
-                
+
             }
             else
             {
-                MessageBox.Show("No data found for the provided ID.");
+                MessageBox.Show("No data found for the provided ID 或 name.");
             }
-            
-            
+            MessageBox.Show("年度报告生成完毕");
         }
         private void textBox1_TextChanged(object sender, EventArgs e)
         {
@@ -121,9 +208,11 @@ namespace WeiboAnnualReportApp
                 text = row.Field<string>("text")
             }).ToList();
 
-            String topCity;
+            Dictionary<String, int> freqMap;
             int numCity;
-            getCity(dt, out topCity, out numCity);  // 获取去过最多的城市和去过的城市数量并赋值到两个变量上
+            getCity(dt, out freqMap, out numCity);  // 获取城市批次字典和去过的城市数量并赋值到两个变量上
+            KeyValuePair<string, int> maxEntryCity = freqMap.OrderByDescending(entry => entry.Value).First();
+            String topCity = maxEntryCity.Key;
 
             Double avgSentiment;  // 感情得分，1为最正向，0为最负向
             Dictionary<string, int> wordFreqMap;  // 词频分布
@@ -136,7 +225,7 @@ namespace WeiboAnnualReportApp
             {
                 comment = "看起来你的一年过得非常开心，充满了阳光和活力！";
             }
-            else if(avgSentiment > 0.6 && avgSentiment <= 0.8)
+            else if (avgSentiment > 0.6 && avgSentiment <= 0.8)
             {
                 comment = "你的一年里有很多愉快的时光，充满了积极的能量！";
             }
@@ -152,7 +241,6 @@ namespace WeiboAnnualReportApp
             {
                 comment = "你的一年过得似乎有些不顺利，遇到了不少挑战和困难。";
             }
-            // 具体用什么词还没想好
 
             // 在这里可以对词频分布进行一些处理
             // 1. 获取说的最多的词语
@@ -164,7 +252,7 @@ namespace WeiboAnnualReportApp
             string latesttime;
             string latesttext;
             string posts;
-            Analyzetime(dt, out timesection, out latestdate, out latesttime, out latesttext,out posts);
+            Analyzetime(dt, out timesection, out latestdate, out latesttime, out latesttext, out posts);
 
             string json = JsonConvert.SerializeObject(points);
             string phrase1 = numCity.ToString();//去过多少城市
@@ -173,9 +261,12 @@ namespace WeiboAnnualReportApp
             string phrase4 = topWord;  //最喜欢说的词语
             string phrase5 = latestdate;  //睡的最晚的一天
             string phrase6 = latesttime;  //几点钟睡的
-            string phrase7 = latesttext;  //那个时间段发的微博
+            string phrase7 = RemoveAfterSubstring(latesttext, "http");  //那个时间段发的微博
             string phrase8 = comment;  // 对用户情感的一个评价
             string phrase9 = posts;    //最多时间点发表微博数
+            string phrase10 = dt.Rows.Count.ToString();//一共发了多少微博
+            string phrase11 = calculateTotalDistance(dt).ToString();//跑过的总里程
+            string phrase12 = GetAfterSymbol(label7.Text,'：');
 
             string template = File.ReadAllText(templateFilePath);
             string outputContent = template.Replace("{data_placeholder}", json)
@@ -187,15 +278,17 @@ namespace WeiboAnnualReportApp
             .Replace("{phrase6_placeholder}", phrase6)
             .Replace("{phrase7_placeholder}", phrase7)
             .Replace("{phrase8_placeholder}", phrase8)
-            .Replace("{phrase9_placeholder}", phrase9); 
-
+            .Replace("{phrase9_placeholder}", phrase9)
+            .Replace("{phrase10_placeholder}", phrase10)
+            .Replace("{phrase11_placeholder}", phrase11)
+            .Replace("{name_place}", phrase12);
             File.WriteAllText(outputFilePath, outputContent);
         }
         private void OpenHtmlFile(string filePath)
         {
             try
             {
-                Process.Start("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",filePath);
+                Process.Start("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", filePath);
             }
             catch (Exception ex)
             {
@@ -258,7 +351,7 @@ namespace WeiboAnnualReportApp
             avgSentiment = sentiments.Sum() / sentiments.Count;
         }
 
-        private void getCity(DataTable dt, out String topCity, out int numCity)
+        private void getCity(DataTable dt, out Dictionary<string, int> freqMap, out int numCity)
         {
             var points = dt.AsEnumerable().Select(row => new
             {
@@ -267,7 +360,7 @@ namespace WeiboAnnualReportApp
                 text = row.Field<string>("text")
             }).ToList();
             List<String> sCities = new List<String>();  // 记录所有微博的城市顺序表
-            foreach( var point in points )
+            foreach (var point in points)
             {
                 moPoint sPoint = new moPoint(point.longitude, point.latitude);  // 发微博的点
                 moFeatures sFeatures = moMap.Layers.GetItem(0).SearchFeaturesByPoint(sPoint, 0);  // 查找包含点的要素
@@ -277,7 +370,7 @@ namespace WeiboAnnualReportApp
                     sCities.Add((String)sAttributes.GetItem(1));  // 将该微博的城市添加到表中
                 }
             }
-            Dictionary<string, int> freqMap = new Dictionary<string, int>();  // 创建一个城市频率表，用于统计哪个城市发博最多
+            freqMap = new Dictionary<string, int>();  // 创建一个城市频率表，用于统计哪个城市发博最多
             foreach (string str in sCities)
             {
                 if (freqMap.ContainsKey(str))
@@ -289,12 +382,12 @@ namespace WeiboAnnualReportApp
                     freqMap.Add(str, 1);
                 }
             }
-            KeyValuePair<string, int> maxEntry = freqMap.OrderByDescending(entry => entry.Value).First();
-            topCity = maxEntry.Key;
+
             numCity = freqMap.Count;
         }
+
         private Dictionary<DateTime, string> postInfo = new Dictionary<DateTime, string>();
-        private void Analyzetime(DataTable dt,out String timesection ,out String latestdate,out String latesttime,out String latesttext , out String posts)
+        private void Analyzetime(DataTable dt, out String timesection, out String latestdate, out String latesttime, out String latesttext, out String posts)
         {
             List<DateTime> postTimes = new List<DateTime>();
 
@@ -334,7 +427,7 @@ namespace WeiboAnnualReportApp
                                           .FirstOrDefault();
 
             latesttext = latestPostText;
-            latestdate = latestPost.Year.ToString()+"年"+latestPost.Month.ToString()+"月"+latestPost.Day.ToString()+"日";
+            latestdate = latestPost.Year.ToString() + "年" + latestPost.Month.ToString() + "月" + latestPost.Day.ToString() + "日";
             timesection = mostActiveHour.Key.ToString();
             posts = mostActiveHour.Count().ToString();
             latesttime = latestPost.TimeOfDay.ToString();
@@ -354,7 +447,217 @@ namespace WeiboAnnualReportApp
 
             //MessageBox.Show(resultMessage.ToString());
         }
+
+        /// <summary>
+        /// 用于加入用户地点信息的一次性脚本，勿重复运行
+        /// </summary>
+        private void AddCityInfo()
+        {
+            string queryId = $"SELECT id FROM 苏州市微博数据.travel_poi_userinfo_suzhou";  // 先查询到所有的微博用户id
+            DataTable dtId = new DataTable();  // 用户的id表，一列
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    MySqlCommand cmd = new MySqlCommand(queryId, conn);
+                    MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
+                    adapter.Fill(dtId);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                conn.Open();
+                int numRow = 0;
+                foreach (DataRow row in dtId.Rows)
+                {
+                    ++numRow;
+                    string userId = row[0].ToString();  // 获取用户id，id在表的第一列
+                    string queryCity = $"SELECT latitude, longitude, text FROM 苏州市微博数据.geotaggedweibo WHERE 苏州市微博数据.geotaggedweibo.userid = @id";
+                    DataTable dt = new DataTable();
+                    try
+                    {
+                        MySqlCommand cmdCity = new MySqlCommand(queryCity, conn);
+                        cmdCity.Parameters.AddWithValue("@id", userId);
+                        MySqlDataAdapter adapterCity = new MySqlDataAdapter(cmdCity);
+                        adapterCity.Fill(dt);
+
+
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Error occurred. Error message: {ex.Message}");
+                    }
+                    getCity(dt, out Dictionary<String, int> freqMap, out int numCity);  // 根据表格返回用户去过的城市字典
+                                                                                        // 将freqMap中所有的城市放入sql语句中并插入
+                    string limitedCities;
+                    if (freqMap.Count > 7)
+                    {
+                        // 将频次字典按值（即频次）降序排序，并选择前7个城市
+                        var sortedCities = freqMap.OrderByDescending(pair => pair.Value).Take(7).Select(pair => pair.Key);
+                        limitedCities = string.Join(",", sortedCities);  // 选取前7个城市并拼接成字符串
+                    }
+                    else
+                    {
+                        limitedCities = string.Join(",", freqMap.Keys);  // 不需要排序，直接使用所有城市，节省计算资源
+                    }
+                    try
+                    {
+                        string query = $"UPDATE 苏州市微博数据.travel_poi_userinfo_suzhou SET visited_cities = CONCAT_WS(',', @cities) WHERE id = @userId;";
+                        MySqlCommand cmd = new MySqlCommand(query, conn);
+                        cmd.Parameters.AddWithValue("@cities", limitedCities);
+                        cmd.Parameters.AddWithValue("@userId", userId);
+                        cmd.ExecuteNonQuery();
+                        System.Diagnostics.Debug.WriteLine(numRow);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Error occurred. limitedCities: {limitedCities}.  id: {userId}. Error message: {ex.Message}");
+                    }
+                }
+            }
+
+        }
+
+        /// <summary>
+        /// 用于创建用户地点倒排表的一次性脚本，勿重复运行
+        /// </summary>
+        private void CreateInvert()
+        {
+            string queryId = @"SELECT id, screen_name, visited_cities FROM 苏州市微博数据.travel_poi_userinfo_suzhou;";
+            DataTable dtId = new DataTable();
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    MySqlCommand cmd = new MySqlCommand(queryId, conn);
+                    MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
+                    adapter.Fill(dtId);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+            var users = dtId.AsEnumerable().Select(row => new
+            {
+                id = row.Field<Int64>("id"),
+                screen_name = row.Field<string>("screen_name"),
+                visited_cities = row.Field<string>("visited_cities")
+            }).ToList();
+
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    int progress = 0;  // 自制进度条
+                    foreach (var user in users)
+                    {
+                        ++progress;
+                        Debug.WriteLine(progress);
+                        string[] cities = user.visited_cities.Split(',');
+                        foreach (string city in cities)
+                        {
+                            if (!string.IsNullOrEmpty(city.Trim()))
+                            {
+                                MySqlCommand cmd = new MySqlCommand("INSERT INTO 苏州市微博数据.location_user_invert (city_name, id, nickname) VALUES (@city, @id, @screen_name)", conn);
+                                cmd.Parameters.AddWithValue("@city", city.Trim());
+                                cmd.Parameters.AddWithValue("@id", user.id);
+                                cmd.Parameters.AddWithValue("@screen_name", user.screen_name);
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+        }
+
+        //计算地理坐标系两点距离
+        double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
+        {
+            const double earthRadius = 6371; // 地球半径，单位为千米
+
+            // 将经纬度转换为弧度
+            double lat1Rad = ToRadians(lat1);
+            double lon1Rad = ToRadians(lon1);
+            double lat2Rad = ToRadians(lat2);
+            double lon2Rad = ToRadians(lon2);
+
+            // 使用 Haversine 公式计算两点之间的距离
+            double dlon = lon2Rad - lon1Rad;
+            double dlat = lat2Rad - lat1Rad;
+            double a = Math.Pow(Math.Sin(dlat / 2), 2) + Math.Cos(lat1Rad) * Math.Cos(lat2Rad) * Math.Pow(Math.Sin(dlon / 2), 2);
+            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+            double distance = earthRadius * c;
+
+            return distance;
+        }
+        // 转换为弧度
+        double ToRadians(double degrees)
+        {
+            return degrees * Math.PI / 180;
+        }
+        // 计算大地线总长度
+        public double calculateTotalDistance(DataTable dt)
+        {
+            double totalDistance = 0.0;
+
+            for (int i = 0; i < dt.Rows.Count - 1; i++)
+            {
+                double lat1 = Convert.ToDouble(dt.Rows[i]["latitude"]);
+                double lon1 = Convert.ToDouble(dt.Rows[i]["longitude"]);
+                double lat2 = Convert.ToDouble(dt.Rows[i + 1]["latitude"]);
+                double lon2 = Convert.ToDouble(dt.Rows[i + 1]["longitude"]);
+
+                double distance = CalculateDistance(lat1, lon1, lat2, lon2);
+                totalDistance += distance;
+            }
+            return totalDistance;
+        }
+
+        //移除字符串中特定字符后的内容
+        private string RemoveAfterSubstring(string input, string substring)
+        {
+            int index = input.IndexOf(substring);
+            if (index != -1)
+            {
+                return input.Substring(0, index);
+            }
+            else
+            {
+                return input;
+            }
+        }
+
+        //获取字符串特定字符后的内容
+        private string GetAfterSymbol(string original, char symbol)
+        {
+            // 找到特定符号的位置
+            int index = original.IndexOf(symbol);
+
+            // 如果找到了符号，返回符号后面的部分，否则返回原始字符串
+            if (index != -1)
+            {
+                return original.Substring(index + 1);
+            }
+            else
+            {
+                return original;
+            }
+        }
         #endregion
+
+
     }
 }
 
