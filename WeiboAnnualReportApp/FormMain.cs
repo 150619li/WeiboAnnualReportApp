@@ -9,6 +9,7 @@ using System.Text;
 using Mysqlx.Crud;
 using static System.ComponentModel.Design.ObjectSelectorEditor;
 using System.Windows.Forms;
+using Microsoft.VisualBasic.ApplicationServices;
 
 
 namespace WeiboAnnualReportApp
@@ -67,6 +68,7 @@ namespace WeiboAnnualReportApp
 
             string id = textBox1.Text;
             string name = textBox1.Text;
+            string visited_cities = "";
 
             if (string.IsNullOrEmpty(id))
             {
@@ -75,6 +77,8 @@ namespace WeiboAnnualReportApp
             }
             booltest = true;
 
+            labelProgress.Text = "查询用户微博信息中...";
+            this.Refresh();
             //昵称查询获取ID
             string query1 = "SELECT * FROM 苏州市微博数据.travel_poi_userinfo_suzhou WHERE 苏州市微博数据.travel_poi_userinfo_suzhou.screen_name = \"" + name + "\"";
             DataTable dt1 = new DataTable();
@@ -99,6 +103,7 @@ namespace WeiboAnnualReportApp
                 string gender = dt1.Rows[0][8].ToString();
                 string followers = dt1.Rows[0][9].ToString();
                 string friends = dt1.Rows[0][10].ToString();
+                visited_cities = dt1.Rows[0][19].ToString();
                 if (string.IsNullOrEmpty(description))
                     label2.Text = "个性签名：这个家伙很懒，没留下签名";
                 else
@@ -111,6 +116,7 @@ namespace WeiboAnnualReportApp
                 label5.Text = "好友数量：" + friends;
                 label6.Text = "用户ID：" + id;
                 label7.Text = "用户昵称：" + name;
+                
             }
             //ID获取昵称
             string query2 = "SELECT * FROM 苏州市微博数据.travel_poi_userinfo_suzhou WHERE 苏州市微博数据.travel_poi_userinfo_suzhou.id = " + id;
@@ -137,6 +143,7 @@ namespace WeiboAnnualReportApp
                 string gender = dt2.Rows[0][8].ToString();
                 string followers = dt2.Rows[0][9].ToString();
                 string friends = dt2.Rows[0][10].ToString();
+                visited_cities = dt2.Rows[0][19].ToString();
                 if (string.IsNullOrEmpty(description))
                 {
                     label2.Text = "个性签名：这个家伙很懒，没留下签名";
@@ -155,6 +162,8 @@ namespace WeiboAnnualReportApp
                 label7.Text = "用户昵称：" + name;
             }
 
+            labelProgress.Text = "查询微博空间信息中...";
+            this.Refresh();
             string query = $"SELECT latitude,longitude,text,created_at FROM 苏州市微博数据.geotaggedweibo WHERE 苏州市微博数据.geotaggedweibo.userid = @id and 苏州市微博数据.geotaggedweibo.latitude < 90";
             DataTable dt = new DataTable();
             using (MySqlConnection conn = new MySqlConnection(connectionString))
@@ -178,14 +187,13 @@ namespace WeiboAnnualReportApp
             if (dt.Rows.Count > 0)
             {
                 //ShowMapWithPoints(dt);
-                GenerateHtmlFile(dt);
-
+                GenerateHtmlFile(dt, id, visited_cities);
             }
             else
             {
                 MessageBox.Show("No data found for the provided ID 或 name.");
             }
-            MessageBox.Show("年度报告生成完毕");
+            
         }
         private void textBox1_TextChanged(object sender, EventArgs e)
         {
@@ -195,10 +203,11 @@ namespace WeiboAnnualReportApp
 
         #region 私有函数
 
-        private void GenerateHtmlFile(DataTable dt)
+        private void GenerateHtmlFile(DataTable dt, string id, string visited_cities)
         {
             string basePath = Path.GetDirectoryName(Application.ExecutablePath);  // 找到那个exe文件所在的位置
             string templateFilePath = basePath + Path.DirectorySeparatorChar + "html" + Path.DirectorySeparatorChar + "MainPage_template.html";
+            string templateFilePath1 = basePath + Path.DirectorySeparatorChar + "html" + Path.DirectorySeparatorChar + "MainPage1_template.html";
             string outputFilePath = basePath + Path.DirectorySeparatorChar + "html" + Path.DirectorySeparatorChar + "MainPage.html";
 
             var points = dt.AsEnumerable().Select(row => new
@@ -208,12 +217,16 @@ namespace WeiboAnnualReportApp
                 text = row.Field<string>("text")
             }).ToList();
 
+            labelProgress.Text = "进行空间信息匹配...";
+            this.Refresh();
             Dictionary<String, int> freqMap;
             int numCity;
             getCity(dt, out freqMap, out numCity);  // 获取城市批次字典和去过的城市数量并赋值到两个变量上
             KeyValuePair<string, int> maxEntryCity = freqMap.OrderByDescending(entry => entry.Value).First();
             String topCity = maxEntryCity.Key;
 
+            labelProgress.Text = "计算微博情感信息...";
+            this.Refresh();
             Double avgSentiment;  // 感情得分，1为最正向，0为最负向
             Dictionary<string, int> wordFreqMap;  // 词频分布
             processPython(dt, out avgSentiment, out wordFreqMap);  // 获取平均的感情得分和词频分布
@@ -247,6 +260,46 @@ namespace WeiboAnnualReportApp
             KeyValuePair<string, int> maxEntry = wordFreqMap.OrderByDescending(entry => entry.Value).First();
             String topWord = maxEntry.Key;
 
+            // 获取相似的用户，并将相似用户的数量输出出来
+            labelProgress.Text = "匹配相似用户信息...";
+            this.Refresh();
+            int userNum;
+            DataTable dtSimilar = getSimilar(id, visited_cities, 5, out userNum);  // 第三个参数可以自定义最多比较多少个一样去过的城市，这里先设为5
+            // 这里可以对相似用户数量和相似用户的表做一些处理
+            string similarReport = "未定义";  // 最后给用户呈现的字符串
+            if (userNum == 0)
+            {
+                similarReport = "你的行进轨迹与众不同";
+            }
+            else if (userNum <= 4)  // 这里我们默认只显示4个相似用户，但是后期可以更改
+            {
+                StringBuilder similarUsers = new StringBuilder();
+                for (int i = 0; i < dtSimilar.Rows.Count; i++)
+                {
+                    string userName = dtSimilar.Rows[i]["nickname"].ToString();
+                    similarUsers.Append(userName);
+                    if (i < dtSimilar.Rows.Count - 1)
+                    {
+                        similarUsers.Append(", ");
+                    }
+                }
+                similarReport =similarUsers.ToString();
+            }
+            else
+            {
+                StringBuilder similarUsers = new StringBuilder();
+                for (int i = 0; i < 4; i++)
+                {
+                    string userName = dtSimilar.Rows[i]["nickname"].ToString();
+                    similarUsers.Append(userName);
+                    if (i < 3)
+                    {
+                        similarUsers.Append(", ");
+                    }
+                }
+                similarReport = similarUsers.ToString();
+            }
+
             string timesection;
             string latestdate;
             string latesttime;
@@ -266,9 +319,19 @@ namespace WeiboAnnualReportApp
             string phrase9 = posts;    //最多时间点发表微博数
             string phrase10 = dt.Rows.Count.ToString();//一共发了多少微博
             string phrase11 = calculateTotalDistance(dt).ToString();//跑过的总里程
-            string phrase12 = GetAfterSymbol(label7.Text,'：');
+            string phrase12 = GetAfterSymbol(label7.Text,'：');//获取用户昵称
+            string phrase13 = userNum.ToString();
+            string phrase14 = similarReport;
 
-            string template = File.ReadAllText(templateFilePath);
+            string template = "未读取";
+            if (userNum > 0)
+            {
+                template = File.ReadAllText(templateFilePath);
+            }
+            else
+            {
+                template = File.ReadAllText(templateFilePath1);
+            }
             string outputContent = template.Replace("{data_placeholder}", json)
             .Replace("{phrase1_placeholder}", phrase1)
             .Replace("{phrase2_placeholder}", phrase2)
@@ -281,8 +344,13 @@ namespace WeiboAnnualReportApp
             .Replace("{phrase9_placeholder}", phrase9)
             .Replace("{phrase10_placeholder}", phrase10)
             .Replace("{phrase11_placeholder}", phrase11)
-            .Replace("{name_place}", phrase12);
+            .Replace("{name_place}", phrase12)
+            .Replace("{phrase13_placeholder}", phrase13)
+            .Replace("{phrase14_placeholder}", phrase14);
+            
+
             File.WriteAllText(outputFilePath, outputContent);
+            labelProgress.Text = "生成成功！请点击打开年度报告";
         }
         private void OpenHtmlFile(string filePath)
         {
@@ -296,6 +364,12 @@ namespace WeiboAnnualReportApp
             }
         }
 
+        /// <summary>
+        /// 所有需要进行python处理的事项
+        /// </summary>
+        /// <param name="dt"></param>
+        /// <param name="avgSentiment"></param>
+        /// <param name="wordFreqMap"></param>
         private void processPython(DataTable dt, out Double avgSentiment, out Dictionary<string, int> wordFreqMap)
         {
             Runtime.PythonDLL = @"C:\Users\86151\AppData\Local\Programs\Python\Python38\python38.dll";
@@ -351,6 +425,12 @@ namespace WeiboAnnualReportApp
             avgSentiment = sentiments.Sum() / sentiments.Count;
         }
 
+        /// <summary>
+        /// 获得用户去过的城市以及城市数量
+        /// </summary>
+        /// <param name="dt"></param>
+        /// <param name="freqMap"></param>
+        /// <param name="numCity"></param>
         private void getCity(DataTable dt, out Dictionary<string, int> freqMap, out int numCity)
         {
             var points = dt.AsEnumerable().Select(row => new
@@ -384,6 +464,63 @@ namespace WeiboAnnualReportApp
             }
 
             numCity = freqMap.Count;
+        }
+
+        private DataTable getSimilar(string id, string visited_cities, int cityCompareLen, out int userNum)
+        {
+            string[] cities = Array.Empty<string>();
+            if (string.IsNullOrEmpty(visited_cities) || visited_cities.Split(',').Length <= cityCompareLen)
+            {
+                cities = visited_cities.Split(',');
+            }
+            else
+            {
+                cities = visited_cities.Split(',').Take(cityCompareLen).ToArray();
+            }
+            StringBuilder cityParams = new StringBuilder();
+            for (int i = 0; i < cities.Length; i++)
+            {
+                string paramName = "@city" + i;
+                cityParams.Append(paramName);
+                if (i < cities.Length - 1)
+                    cityParams.Append(",");
+            }
+
+            string querySimilar =
+                @"SELECT id, nickname
+        FROM location_user_invert
+        WHERE city_Name IN (" + cityParams.ToString() + @")
+        GROUP BY id
+        HAVING COUNT(DISTINCT city_name) = @cityCount AND id != @mainId;";
+
+            DataTable dtUsers = new DataTable();
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    MySqlCommand cmd = new MySqlCommand(querySimilar, conn);
+
+                    // 添加城市参数
+                    for (int i = 0; i < cities.Length; i++)
+                    {
+                        string paramName = "@city" + i;
+                        cmd.Parameters.AddWithValue(paramName, cities[i]);
+                    }
+
+                    // 设置城市数量参数
+                    cmd.Parameters.AddWithValue("@cityCount", cities.Length);
+                    cmd.Parameters.AddWithValue("@mainId", id);
+                    MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
+                    adapter.Fill(dtUsers);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+            userNum = dtUsers.Rows.Count;
+            return dtUsers;
         }
 
         private Dictionary<DateTime, string> postInfo = new Dictionary<DateTime, string>();
