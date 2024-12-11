@@ -262,9 +262,13 @@ namespace WeiboAnnualReportApp
 
             // 获取相似的用户，并将相似用户的数量输出出来
             labelProgress.Text = "匹配相似用户信息...";
+            Stopwatch sw = Stopwatch.StartNew();
             this.Refresh();
             int userNum;
-            DataTable dtSimilar = getSimilar(id, visited_cities, 5, out userNum);  // 第三个参数可以自定义最多比较多少个一样去过的城市，这里先设为5
+            DataTable dtSimilar = getSimilar(id, visited_cities, 6, out userNum);  // 第三个参数可以自定义最多比较多少个一样去过的城市，这里先设为5
+            sw.Stop();
+            TimeSpan elapsedTime = sw.Elapsed;
+            Debug.WriteLine(elapsedTime);
             // 这里可以对相似用户数量和相似用户的表做一些处理
             string similarReport = "未定义";  // 最后给用户呈现的字符串
             if (userNum == 0)
@@ -372,7 +376,10 @@ namespace WeiboAnnualReportApp
         /// <param name="wordFreqMap"></param>
         private void processPython(DataTable dt, out Double avgSentiment, out Dictionary<string, int> wordFreqMap)
         {
-            Runtime.PythonDLL = @"C:\Users\86151\AppData\Local\Programs\Python\Python38\python38.dll";
+            if(Runtime.PythonDLL == null)
+            {
+                Runtime.PythonDLL = @"C:\Users\86151\AppData\Local\Programs\Python\Python38\python38.dll";
+            }
             PythonEngine.Initialize();  // 初始化python启动器
             var points = dt.AsEnumerable().Select(row => new
             {
